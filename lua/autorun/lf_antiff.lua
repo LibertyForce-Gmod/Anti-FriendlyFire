@@ -17,44 +17,45 @@ for cvar, v in pairs( convars ) do
 end
 
 
-hook.Add("EntityTakeDamage", "LF_AntiFF_Hook",
-	function(ent, dmginfo)
-		if IsValid(ent) and ent:IsValid() then
-			local att = dmginfo:GetAttacker()
-			if IsValid(att) and att:IsValid() then
+function AntiFF( ent, dmginfo )
+	if IsValid(ent) and ent:IsValid() then
+		local att = dmginfo:GetAttacker()
+		if IsValid(att) and att:IsValid() then
+			
+			
+			if ent:IsNPC() then
+				if att:IsPlayer() and AntiFF_plytonpc and (
+					ent:Disposition(att) == D_LI
+					or ( ent:Disposition(att) == D_NU and AntiFF_rel_n )
+					or ( ent:Disposition(att) == D_FR and AntiFF_rel_f )
+				)
+				then
+					dmginfo:SetDamage(0)
 				
-				
-				if ent:IsNPC() then
-					if att:IsPlayer() and AntiFF_plytonpc and (
-						ent:Disposition(att) == D_LI
-						or ( ent:Disposition(att) == D_NU and AntiFF_rel_n )
-						or ( ent:Disposition(att) == D_FR and AntiFF_rel_f )
-					)
-					then
+				elseif att:IsNPC() and AntiFF_npctonpc and (
+					att:Disposition(ent) == D_LI
+					or ( att:Disposition(ent) == D_NU and AntiFF_rel_n )
+				)
+				then
+					if ent != att or AntiFF_npctoself then
 						dmginfo:SetDamage(0)
-					
-					elseif att:IsNPC() and AntiFF_npctonpc and (
-						att:Disposition(ent) == D_LI
-						or ( att:Disposition(ent) == D_NU and AntiFF_rel_n )
-					)
-					then
-						if ent != att or AntiFF_npctoself then
-							dmginfo:SetDamage(0)
-						end
-					
 					end
 				
-				
-				elseif AntiFF_prop_d and ( att:IsPlayer() or att:IsNPC() ) and not ( ent:IsPlayer() ) then
-					dmginfo:SetDamage(0)
-					if AntiFF_prop_f then dmginfo:SetDamageForce(Vector(0,0,0)) end
-				
-				
 				end
+			
+			
+			elseif AntiFF_prop_d and ( att:IsPlayer() or att:IsNPC() ) and not ( ent:IsPlayer() ) then
+				dmginfo:SetDamage(0)
+				if AntiFF_prop_f then dmginfo:SetDamageForce(Vector(0,0,0)) end
+			
+			
 			end
 		end
 	end
-)
+end
+hook.Add("EntityTakeDamage", "LF_AntiFF_Hook", AntiFF )
+
+
 
 function AntiFF_Setup()
 	AntiFF_plytonpc = GetConVar("npc_antiff_player"):GetBool()
@@ -94,7 +95,7 @@ net.Receive("lf_antiff_convar_change", function(len,ply)
 		if !convars[cvar] then ply:Kick("Illegal convar change") return end
 		if !ply:IsSuperAdmin() and !( GetConVar("npc_antiff_admins_allowall"):GetBool() and ply:IsAdmin() ) then return end
 		if !ply:IsSuperAdmin() and cvar == "npc_antiff_admins_allowall" then return end
-		RunConsoleCommand( cvar, net.ReadBit() )
+		RunConsoleCommand( cvar, net.ReadBool() == true and "1" or "0" )
 	end
 end)
 
@@ -119,57 +120,61 @@ net.Receive("lf_antiff_convar_sync", function()
 end)
 
 
-local m = { }
-
-local function Change( cvar, v )
-	net.Start("lf_antiff_convar_change")
-	net.WriteString( cvar )
-	net.WriteBit( v )
-	net.SendToServer()
-end
-
-local function Checkbox( panel, x, y, cvar, label )
-	local c = vgui.Create( "DCheckBoxLabel", panel )
-	c:SetPos( x, y )
-	c:SetValue( GetConVar(cvar):GetBool() )
-	c:SetText( label )
-	c:SetDark( true )
-	c:SizeToContents()
-	function c:OnChange( v ) Change( cvar, v ) end
-end
-
-local function Text( panel, x, y, text )
-	local t = vgui.Create( "DLabel", panel )
-	t:SetPos( x, y )
-	t:SetAutoStretchVertical( true )
-	t:SetSize( m.pw - 40, 0 )
-	t:SetDark( true )
-	t:SetText( text )
-	t:SetWrap( true )
-end
+local Frame
 
 
 local function Menu( )
 
-	m.Frame = vgui.Create( "DFrame" )
-	m.fw = 500 m.fh = 300
-	m.pw = m.fw - 10 m.ph = m.fh - 62
-	m.Frame:SetSize( m.fw, m.fh )
-	m.Frame:SetTitle( "Anti-FriendlyFire" )
-	m.Frame:SetVisible( true )
-	m.Frame:SetDraggable( false )
-	m.Frame:ShowCloseButton( true )
-	m.Frame:Center()
-	m.Frame:MakePopup()
+	if IsValid( Frame ) then Frame:Close() return end
+
+	Frame = vgui.Create( "DFrame" )
+	local fw, fh = 500, 300
+	local pw, ph = fw - 10, fh - 62
+	Frame:SetSize( fw, fh )
+	Frame:SetTitle( "Anti-FriendlyFire" )
+	Frame:SetVisible( true )
+	Frame:SetDraggable( true )
+	Frame:ShowCloseButton( true )
+	Frame:Center()
+	Frame:MakePopup()
+	Frame:SetKeyboardInputEnabled( false )
 	
-	m.Sheet = vgui.Create( "DPropertySheet", m.Frame )
-	m.Sheet:Dock( FILL )
+	local function Change( cvar, v )
+		net.Start("lf_antiff_convar_change")
+		net.WriteString( cvar )
+		net.WriteBool( v )
+		net.SendToServer()
+	end
+
+	local function Checkbox( panel, x, y, cvar, label, tooltip )
+		local c = vgui.Create( "DCheckBoxLabel", panel )
+		c:SetPos( x, y )
+		c:SetValue( GetConVar(cvar):GetBool() )
+		c:SetText( label )
+		c:SetTooltip( tooltip )
+		c:SetDark( true )
+		c:SizeToContents()
+		function c:OnChange( v ) Change( cvar, v ) end
+	end
+
+	local function Text( panel, x, y, text )
+		local t = vgui.Create( "DLabel", panel )
+		t:SetPos( x, y )
+		t:SetAutoStretchVertical( true )
+		t:SetSize( pw - 40, 0 )
+		t:SetDark( true )
+		t:SetText( text )
+		t:SetWrap( true )
+	end
+	
+	local Sheet = vgui.Create( "DPropertySheet", Frame )
+	Sheet:Dock( FILL )
 	
 	
 	if ( LocalPlayer():IsSuperAdmin() or ( GetConVar("npc_antiff_admins_allowall"):GetBool() and LocalPlayer():IsAdmin() ) ) then
 	
-	local panel = vgui.Create( "DPanel", m.Sheet )
-	m.Sheet:AddSheet( "Main Settings", panel, "icon16/script_edit.png" )
+	local panel = vgui.Create( "DPanel", Sheet )
+	Sheet:AddSheet( "Main Settings", panel, "icon16/script_edit.png" )
 	
 		Text( panel, 20, 20, "Enable / Disable for yourself and NPCs:" )
 		
@@ -186,8 +191,8 @@ local function Menu( )
 		end
 	
 	
-	local panel = vgui.Create( "DPanel", m.Sheet )
-	m.Sheet:AddSheet( "Relationships", panel, "icon16/group.png" )
+	local panel = vgui.Create( "DPanel", Sheet )
+	Sheet:AddSheet( "Relationships", panel, "icon16/group.png" )
 		
 		Checkbox( panel, 20, 20, "npc_antiff_rel_neutral", "No damage to NPCs with neutral relationship" )
 		Text( panel, 20, 40, "\"I don't hurt you, you don't hurt me. Let's just ignore each other.\"" )
@@ -201,8 +206,8 @@ local function Menu( )
 		Text( panel, 20, 180, "Please note, that you won't encounter neutral or scared NPCs in GMod by default. However, you may encounter them on maps and there are also addons that allow you to modify relationships." )
 	
 	
-	local panel = vgui.Create( "DPanel", m.Sheet )
-	m.Sheet:AddSheet( "Prop Damage", panel, "icon16/box.png" )
+	local panel = vgui.Create( "DPanel", Sheet )
+	Sheet:AddSheet( "Prop Damage", panel, "icon16/box.png" )
 		
 		Checkbox( panel, 20, 20, "npc_antiff_prop", "No damage to props" )
 		Text( panel, 20, 40, "\"My insurance will terminate my contract, if I break anymore things. Let's be more careful.\"" )
@@ -215,8 +220,8 @@ local function Menu( )
 	end
 	
 	
-	local panel = vgui.Create( "DPanel", m.Sheet )
-	m.Sheet:AddSheet( "About", panel, "icon16/information.png" )
+	local panel = vgui.Create( "DPanel", Sheet )
+	Sheet:AddSheet( "About", panel, "icon16/information.png" )
 	
 		local t = vgui.Create( "DLabel", panel )
 		t:SetPos( 20, 20 )
