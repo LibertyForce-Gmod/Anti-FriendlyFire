@@ -1,0 +1,17 @@
+{
+    "description": "Description",
+    "ignore": [
+        "*.ini",
+        "*.psd",
+        "*.vcproj",
+        "*.svn*",
+        "*.git*"
+    ],
+    "tags": [
+        "roleplay",
+        "realism"
+    ],
+    "title": "Anti-FriendlyFire",
+    "type": "tool",
+    "workshopid": 351603470.0
+}
