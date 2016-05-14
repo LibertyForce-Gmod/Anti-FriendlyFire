@@ -2,11 +2,14 @@ if SERVER then
 
 AddCSLuaFile()
 
+local AntiFF = {}
+
 local convars = { }
 convars["npc_antiff_player"]			= { 1, bit.bor( FCVAR_ARCHIVE, FCVAR_REPLICATED, FCVAR_NOTIFY ) }
 convars["npc_antiff_npc"]				= { 1, bit.bor( FCVAR_ARCHIVE, FCVAR_REPLICATED, FCVAR_NOTIFY ) }
+convars["npc_antiff_npc_invallies"]		= { 0, bit.bor( FCVAR_ARCHIVE, FCVAR_REPLICATED, FCVAR_NOTIFY ) }
 convars["npc_antiff_npc_selfdmg"]		= { 0, bit.bor( FCVAR_ARCHIVE, FCVAR_REPLICATED, FCVAR_NOTIFY ) }
-convars["npc_antiff_rel_neutral"]		= { 1, bit.bor( FCVAR_ARCHIVE, FCVAR_REPLICATED, FCVAR_NOTIFY ) }
+convars["npc_antiff_rel_neutral"]		= { 0, bit.bor( FCVAR_ARCHIVE, FCVAR_REPLICATED, FCVAR_NOTIFY ) }
 convars["npc_antiff_rel_fear"]			= { 0, bit.bor( FCVAR_ARCHIVE, FCVAR_REPLICATED, FCVAR_NOTIFY ) }
 convars["npc_antiff_prop"]				= { 0, bit.bor( FCVAR_ARCHIVE, FCVAR_REPLICATED, FCVAR_NOTIFY ) }
 convars["npc_antiff_prop_force"]		= { 0, bit.bor( FCVAR_ARCHIVE, FCVAR_REPLICATED, FCVAR_NOTIFY ) }
@@ -17,61 +20,67 @@ for cvar, v in pairs( convars ) do
 end
 
 
-function AntiFF( ent, dmginfo )
-	if IsValid(ent) and ent:IsValid() then
+function AntiFF.Main( vic, dmginfo )
+	if IsValid(vic) and vic:IsValid() then
 		local att = dmginfo:GetAttacker()
 		if IsValid(att) and att:IsValid() then
 			
-			
-			if ent:IsNPC() then
-				if att:IsPlayer() and AntiFF_plytonpc and (
-					ent:Disposition(att) == D_LI
-					or ( ent:Disposition(att) == D_NU and AntiFF_rel_n )
-					or ( ent:Disposition(att) == D_FR and AntiFF_rel_f )
-				)
-				then
+			if vic:IsNPC() then
+				
+				if AntiFF.invallies and vic:Disposition( player.GetHumans()[1] ) == D_LI then
 					dmginfo:SetDamage(0)
-				
-				elseif att:IsNPC() and AntiFF_npctonpc and (
-					att:Disposition(ent) == D_LI
-					or ( att:Disposition(ent) == D_NU and AntiFF_rel_n )
-				)
-				then
-					if ent != att or AntiFF_npctoself then
+				else
+					
+					if att:IsPlayer() and AntiFF.plytonpc and (
+						vic:Disposition(att) == D_LI
+						or ( vic:Disposition(att) == D_NU and AntiFF.rel_n )
+						or ( vic:Disposition(att) == D_FR and AntiFF.rel_f )
+					)
+					then
 						dmginfo:SetDamage(0)
+					
+					elseif att:IsNPC() and AntiFF.npctonpc and (
+						att:Disposition(vic) == D_LI
+						or ( att:Disposition(vic) == D_NU and AntiFF.rel_n )
+					)
+					then
+						if vic != att or AntiFF.npctoself then
+							dmginfo:SetDamage(0)
+						end
+					
 					end
-				
+					
 				end
 			
-			
-			elseif AntiFF_prop_d and ( att:IsPlayer() or att:IsNPC() ) and not ( ent:IsPlayer() ) then
+			elseif AntiFF.prop_d and ( att:IsPlayer() or att:IsNPC() ) and not ( vic:IsPlayer() ) then
 				dmginfo:SetDamage(0)
-				if AntiFF_prop_f then dmginfo:SetDamageForce(Vector(0,0,0)) end
-			
+				if AntiFF.prop_f then dmginfo:SetDamageForce(Vector(0,0,0)) end
 			
 			end
+			
 		end
 	end
 end
-hook.Add("EntityTakeDamage", "LF_AntiFF_Hook", AntiFF )
+hook.Add("EntityTakeDamage", "LF_AntiFF_Hook", AntiFF.Main )
 
 
 
-function AntiFF_Setup()
-	AntiFF_plytonpc = GetConVar("npc_antiff_player"):GetBool()
-	AntiFF_npctonpc = GetConVar("npc_antiff_npc"):GetBool()
+function AntiFF.Setup()
+	AntiFF.plytonpc = GetConVar("npc_antiff_player"):GetBool()
+	AntiFF.npctonpc = GetConVar("npc_antiff_npc"):GetBool()
 	
-	AntiFF_npctoself = GetConVar("npc_antiff_npc_selfdmg"):GetBool()
+	AntiFF.invallies = GetConVar("npc_antiff_npc_invallies"):GetBool()
+	AntiFF.npctoself = GetConVar("npc_antiff_npc_selfdmg"):GetBool()
 	
-	AntiFF_rel_n = GetConVar("npc_antiff_rel_neutral"):GetBool()
-	AntiFF_rel_f = GetConVar("npc_antiff_rel_fear"):GetBool()
+	AntiFF.rel_n = GetConVar("npc_antiff_rel_neutral"):GetBool()
+	AntiFF.rel_f = GetConVar("npc_antiff_rel_fear"):GetBool()
 	
-	AntiFF_prop_d = GetConVar("npc_antiff_prop"):GetBool()
-	AntiFF_prop_f = GetConVar("npc_antiff_prop_force"):GetBool()
+	AntiFF.prop_d = GetConVar("npc_antiff_prop"):GetBool()
+	AntiFF.prop_f = GetConVar("npc_antiff_prop_force"):GetBool()
 end
 
 for cvar in pairs( convars ) do
-	cvars.AddChangeCallback( cvar, AntiFF_Setup )
+	cvars.AddChangeCallback( cvar, AntiFF.Setup )
 end
 
 
@@ -100,7 +109,7 @@ net.Receive("lf_antiff_convar_change", function(len,ply)
 end)
 
 
-AntiFF_Setup()
+AntiFF.Setup()
 
 
 end
@@ -176,15 +185,14 @@ local function Menu( )
 	local panel = vgui.Create( "DPanel", Sheet )
 	Sheet:AddSheet( "Main Settings", panel, "icon16/script_edit.png" )
 	
-		Text( panel, 20, 20, "Enable / Disable for yourself and NPCs:" )
+		Checkbox( panel, 20, 20, "npc_antiff_player", "Enable Player -> NPC" )
+		Text( panel, 20, 40, "Players can no longer damage NPCs that are friendly towards them.")
 		
-		Checkbox( panel, 20, 50, "npc_antiff_player", "Enable Player -> NPC" )
-		Text( panel, 20, 70, "Players can no longer hurt NPCs that are friendly* towards them\nThis applies if the victim is friendly towards the attacking player." )
+		Checkbox( panel, 20, 80, "npc_antiff_npc", "Enable NPC -> NPC" )
+		Text( panel, 20, 100, "NPCs can no longer damage allied NPCs." )
 		
-		Checkbox( panel, 20, 110, "npc_antiff_npc", "Enable NPC -> NPC" )
-		Text( panel, 20, 130, "NPCs can no longer hurt NPCs that are friendly* towards them\nThis applies if the attacker is friedly towards the victim." )
-		
-		Text( panel, 20, 170, "* For additional conditions besides \"friendly\", see the Relationships tab." )
+		Checkbox( panel, 20, 140, "npc_antiff_npc_invallies", "Enable Invincible Allies" )
+		Text( panel, 20, 160, "All NPCs that are friendly towards the player*, will be invincible.\n(* In Multiplayer, only the player with the lowest ID is checked.)" )
 		
 		if LocalPlayer():IsSuperAdmin() then
 			Checkbox( panel, 20, 210, "npc_antiff_admins_allowall", "Allow all admins to change these settings." )
